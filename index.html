@@ -68,31 +68,46 @@ async function loadReports() {
                 );
             }
         });
-    } catch(e) { console.error("Error loading Airtable records", e); }
+    } catch(e) { console.error("Error loading Airtable records:", e); }
 }
 loadReports();
 
 /* --- FORM SUBMISSION --- */
 document.getElementById('reportForm').addEventListener('submit', async function(e){
     e.preventDefault();
-    if(!tempMarker) { alert("Select a location on map"); return; }
 
-    let description = document.getElementById('description').value;
-    let barangay = document.getElementById('barangay').value;
+    if(!tempMarker) { alert("Please select a location on the map"); return; }
+
+    let description = document.getElementById('description').value.trim();
+    let barangay = document.getElementById('barangay').value.trim();
     let photoFile = document.getElementById('photo').files[0];
 
-    if(photoFile){
-        // Upload photo to Cloudinary
+    if(!description || !barangay || !photoFile) {
+        alert("All fields are required!");
+        return;
+    }
+
+    try {
+        // --- Upload photo to Cloudinary ---
         let formData = new FormData();
         formData.append("file", photoFile);
         formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
 
-        try {
-            let cloudRes = await axios.post(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/upload`, formData);
-            let photoUrl = cloudRes.data.secure_url;
+        let cloudRes = await axios.post(
+            `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/upload`,
+            formData,
+            { headers: { "X-Requested-With": "XMLHttpRequest" } }
+        );
 
-            // Save record in Airtable using Personal Access Token
-            await axios.post(`https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${AIRTABLE_TABLE_NAME}`, {
+        if(!cloudRes.data.secure_url) throw new Error("Cloudinary upload failed");
+
+        let photoUrl = cloudRes.data.secure_url;
+        console.log("Cloudinary URL:", photoUrl);
+
+        // --- Submit report to Airtable ---
+        let airtableRes = await axios.post(
+            `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${AIRTABLE_TABLE_NAME}`,
+            {
                 fields: {
                     Description: description,
                     Barangay: barangay,
@@ -100,14 +115,22 @@ document.getElementById('reportForm').addEventListener('submit', async function(
                     Longitude: tempMarker.getLatLng().lng,
                     Photo: [{ url: photoUrl }]
                 }
-            }, { headers: { Authorization: `Bearer ${AIRTABLE_PAT}`, 'Content-Type': 'application/json' }});
+            },
+            {
+                headers: {
+                    Authorization: `Bearer ${AIRTABLE_PAT}`,
+                    'Content-Type': 'application/json'
+                }
+            }
+        );
 
-            alert("Report submitted successfully!");
-            location.reload();
-        } catch(err) {
-            console.error(err);
-            alert("Error uploading photo or saving report");
-        }
+        console.log("Airtable response:", airtableRes.data);
+        alert("Report submitted successfully!");
+        location.reload();
+
+    } catch(err) {
+        console.error("Error uploading or saving report:", err.response || err);
+        alert("Error uploading photo or saving report. Check console for details.");
     }
 });
 </script>
