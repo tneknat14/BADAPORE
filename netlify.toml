@@ -1,7 +1,3 @@
- [build]
-publish = '"."'
-command = '""'
-"[[redirects]]" = true
-from = "/*"
-to = "/index.html"
-status = "200"
+[build]
+  publish = "."   # Serve files from root
+  command = ""    # No build command needed for static HTML
