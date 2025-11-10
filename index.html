@@ -10,11 +10,14 @@ body { font-family: Arial; margin: 20px; }
 form { margin-bottom: 20px; }
 input, textarea, button { width: 100%; margin-bottom: 10px; padding: 5px; }
 img.uploaded { max-width: 200px; display: block; margin-top: 5px; }
+#error { color: red; margin-bottom: 10px; }
 </style>
 </head>
 <body>
 
 <h2>Report Damaged Electrical Post - Bacolod</h2>
+
+<div id="error"></div>
 
 <form id="reportForm">
     Description:<br>
@@ -32,7 +35,7 @@ img.uploaded { max-width: 200px; display: block; margin-top: 5px; }
 <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
 <script>
 /* --- CONFIG --- */
-const AIRTABLE_PAT = "pattr4ED2Xfua6mMQ.4b9db1ac3c5b1c778ac4aa3bc61f590ae08eca0f994ea88a7c7c516942167fbc"; // Personal Access Token
+const AIRTABLE_PAT = "YOUR_NEW_PAT"; // Replace with new valid PAT
 const AIRTABLE_BASE_ID = "appknuCqH6kGRFlxV";
 const AIRTABLE_TABLE_NAME = "Badapore";
 const CLOUDINARY_CLOUD_NAME = "dqhpfc5aj";
@@ -51,6 +54,10 @@ map.on('click', function(e) {
     tempMarker.bindPopup("Selected location").openPopup();
 });
 
+function showError(message) {
+    document.getElementById('error').textContent = message;
+}
+
 /* --- LOAD EXISTING REPORTS --- */
 async function loadReports() {
     try {
@@ -68,27 +75,34 @@ async function loadReports() {
                 );
             }
         });
-    } catch(e) { console.error("Error loading Airtable records:", e); }
+    } catch(e) {
+        console.error("Error loading Airtable records:", e);
+        if(e.response && e.response.status === 401) showError("Unauthorized: Invalid Personal Access Token (PAT).");
+        else if(e.response && e.response.status === 403) showError("Forbidden: PAT does not have access to this base.");
+        else if(e.response && e.response.status === 404) showError("Not found: Check Base ID or Table Name.");
+        else showError("Failed to load reports. See console for details.");
+    }
 }
 loadReports();
 
 /* --- FORM SUBMISSION --- */
 document.getElementById('reportForm').addEventListener('submit', async function(e){
     e.preventDefault();
+    showError("");
 
-    if(!tempMarker) { alert("Please select a location on the map"); return; }
+    if(!tempMarker) { showError("Please select a location on the map."); return; }
 
     let description = document.getElementById('description').value.trim();
     let barangay = document.getElementById('barangay').value.trim();
     let photoFile = document.getElementById('photo').files[0];
 
     if(!description || !barangay || !photoFile) {
-        alert("All fields are required!");
+        showError("All fields are required!");
         return;
     }
 
     try {
-        // --- Upload photo to Cloudinary ---
+        // --- Upload to Cloudinary ---
         let formData = new FormData();
         formData.append("file", photoFile);
         formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
@@ -100,11 +114,10 @@ document.getElementById('reportForm').addEventListener('submit', async function(
         );
 
         if(!cloudRes.data.secure_url) throw new Error("Cloudinary upload failed");
-
         let photoUrl = cloudRes.data.secure_url;
         console.log("Cloudinary URL:", photoUrl);
 
-        // --- Submit report to Airtable ---
+        // --- Submit to Airtable ---
         let airtableRes = await axios.post(
             `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${AIRTABLE_TABLE_NAME}`,
             {
@@ -129,8 +142,11 @@ document.getElementById('reportForm').addEventListener('submit', async function(
         location.reload();
 
     } catch(err) {
-        console.error("Error uploading or saving report:", err.response || err);
-        alert("Error uploading photo or saving report. Check console for details.");
+        console.error("Submission error:", err.response || err);
+        if(err.response && err.response.status === 401) showError("Unauthorized: Invalid PAT.");
+        else if(err.response && err.response.status === 403) showError("Forbidden: PAT does not have access to this base.");
+        else if(err.response && err.response.status === 404) showError("Not found: Check Base ID or Table Name.");
+        else showError("Failed to submit report. See console for details.");
     }
 });
 </script>
