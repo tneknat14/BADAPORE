@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Bacolod - Damaged Electrical Posts Map (Demo)</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-sA+e2HkIYh1KQ2Yk0G3QmGk0hQp3vY9m0V+g1Yw5r3s=" crossorigin=""/>
+  <style>
+    html,body,#map{height:100%;margin:0;padding:0}
+    .sidebar{position:absolute;top:10px;left:10px;z-index:400;background:white;padding:12px;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,.2);width:320px}
+    .btn{display:inline-block;padding:8px 10px;border-radius:6px;background:#1976d2;color:#fff;text-decoration:none;border:none;cursor:pointer}
+    input,textarea{width:100%;box-sizing:border-box;margin-bottom:8px}
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <div class="sidebar">
+    <h3>Report damaged post (demo)</h3>
+    <label>Description (optional)</label>
+    <textarea id="desc" rows="2" placeholder="e.g. corner of X St and Y Ave"></textarea>
+    <label>Photo</label>
+    <input id="photo" type="file" accept="image/*"/>
+    <label>Pin location</label>
+    <div style="display:flex;gap:8px;">
+      <input id="lat" placeholder="Latitude" />
+      <input id="lng" placeholder="Longitude" />
+    </div>
+    <small>Or click the map to set location.</small>
+    <div style="margin-top:8px;display:flex;gap:8px;">
+      <button id="addBtn" class="btn">Submit (demo)</button>
+      <button id="centerBtn" class="btn" style="background:#4caf50">Center Bacolod</button>
+    </div>
+    <p style="font-size:12px;margin-top:8px;color:#444">This is a demo. To make it public you can deploy and connect a free backend (Supabase) or use uMap for a no-code option — see instructions in the README below.</p>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/supabase.min.js"></script>
+  <script>
+    const SUPABASE_URL = "REPLACE_WITH_YOUR_SUPABASE_URL";
+    const SUPABASE_ANON_KEY = "REPLACE_WITH_YOUR_SUPABASE_ANON_KEY";
+    const IMGUR_CLIENT_ID = "REPLACE_WITH_IMGUR_CLIENT_ID";
+
+    const BACOLOD = [10.6769, 122.9568];
+
+    const map = L.map('map').setView(BACOLOD, 13);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
+      maxZoom:19, attribution:'© OpenStreetMap contributors'
+    }).addTo(map);
+
+    const markers = L.layerGroup().addTo(map);
+
+    map.on('click', function(e){
+      const {lat,lng} = e.latlng;
+      document.getElementById('lat').value = lat.toFixed(6);
+      document.getElementById('lng').value = lng.toFixed(6);
+    });
+
+    document.getElementById('centerBtn').addEventListener('click', ()=>map.setView(BACOLOD,13));
+
+    async function loadExisting(){
+      if(!SUPABASE_URL || !SUPABASE_ANON_KEY) return;
+      try{
+        const supabase = supabase_js.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        const { data, error } = await supabase.from('reports').select('*').order('created_at', {ascending:false});
+        if(error) throw error;
+        data.forEach(addMarkerFromRow);
+      }catch(err){
+        console.warn('Could not load from Supabase (demo):', err.message||err);
+      }
+    }
+
+    function addMarkerFromRow(row){
+      const m = L.marker([row.lat, row.lng]).addTo(markers);
+      let html = `<b>Reported</b><br/>`;
+      if(row.description) html += `<div>${escapeHtml(row.description)}</div>`;
+      if(row.image_url) html += `<div style="margin-top:6px"><a target="_blank" href="${row.image_url}"><img src="${row.image_url}" style="max-width:200px;max-height:120px;object-fit:cover;display:block"/></a></div>`;
+      m.bindPopup(html);
+    }
+
+    function escapeHtml(s){ return (s||'').replace(/[&<>"']/g, function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"}[c]}); }
+
+    async function uploadImageToImgur(file){
+      if(!IMGUR_CLIENT_ID) throw new Error('No Imgur client id set');
+      const form = new FormData();
+      form.append('image', file);
+      const res = await fetch('https://api.imgur.com/3/image',{
+        method:'POST', headers:{ Authorization:'Client-ID '+IMGUR_CLIENT_ID }, body: form
+      });
+      const j = await res.json();
+      if(!j.success) throw new Error('Imgur upload failed');
+      return j.data.link;
+    }
+
+    async function saveReportToSupabase(row){
+      if(!SUPABASE_URL || !SUPABASE_ANON_KEY) throw new Error('Supabase not configured');
+      const supabase = supabase_js.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      const { error } = await supabase.from('reports').insert([row]);
+      if(error) throw error;
+      return true;
+    }
+
+    document.getElementById('addBtn').addEventListener('click', async ()=>{
+      const lat = parseFloat(document.getElementById('lat').value);
+      const lng = parseFloat(document.getElementById('lng').value);
+      const desc = document.getElementById('desc').value.trim();
+      const file = document.getElementById('photo').files[0];
+      if(!lat || !lng){ alert('Please set a location by clicking the map or entering lat/lng'); return; }
+
+      let image_url = null;
+      try{
+        if(file){
+          if(IMGUR_CLIENT_ID){
+            image_url = await uploadImageToImgur(file);
+          } else {
+            image_url = await new Promise((res,rej)=>{
+              const r=new FileReader(); r.onload=()=>res(r.result); r.onerror=()=>rej('readfail'); r.readAsDataURL(file);
+            });
+          }
+        }
+
+        const row = { lat, lng, description:desc, image_url, created_at: new Date().toISOString() };
+        addMarkerFromRow(row);
+
+        if(SUPABASE_URL && SUPABASE_ANON_KEY){
+          try{ await saveReportToSupabase(row); }
+          catch(e){ console.warn('Save to Supabase failed:', e.message||e); }
+        }
+
+        document.getElementById('desc').value=''; document.getElementById('photo').value='';
+        alert('Report added to the map (demo).');
+      }catch(err){
+        console.error(err); alert('Error: '+(err.message||err));
+      }
+    });
+
+    loadExisting();
+  </script>
+</body>
+</html>
+
+<!-- Netlify configuration file -->
+<!-- Save this as netlify.toml in your project root -->
+<!--
+[build]
+  publish = "."
+  command = ""
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Access-Control-Allow-Origin = "*"
+-->
