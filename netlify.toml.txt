@@ -1,8 +1,0 @@
-[build]
-publish = "." # This means Netlify will serve files from the root folder
-command = "" # No build command since it’s a static site
-
-[[redirects]]
-from = "/*"
-to = "/index.html"
-status = 200
