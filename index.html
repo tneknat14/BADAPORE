@@ -1,204 +1,115 @@
 <!DOCTYPE html>
-
 <html>
-
 <head>
-
 <meta charset="utf-8" />
-
 <title>Bacolod Damaged Electrical Posts</title>
-
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
-
 <style>
-
 body { font-family: Arial; margin: 20px; }
-
 #map { height: 500px; margin-top: 20px; }
-
 form { margin-bottom: 20px; }
-
 input, textarea, button { width: 100%; margin-bottom: 10px; padding: 5px; }
-
 img.uploaded { max-width: 200px; display: block; margin-top: 5px; }
-
 </style>
-
 </head>
-
 <body>
 
 <h2>Report Damaged Electrical Post - Bacolod</h2>
 
 <form id="reportForm">
-
     Description:<br>
-
     <textarea id="description" required></textarea><br>
-
     Barangay:<br>
-
     <input type="text" id="barangay" required><br>
-
     Photo:<br>
-
     <input type="file" id="photo" accept="image/*" required><br>
-
     <button type="submit">Submit Report</button>
-
 </form>
 
 <div id="map"></div>
 
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-
 <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
-
 <script>
-
 /* --- CONFIG --- */
-
-const AIRTABLE_PAT = “pattr4ED2Xfua6mMQ”; // Airtable PAT
-
-const AIRTABLE_BASE_ID = “appknuCqH6kGRFlxV”;
-
-const AIRTABLE_TABLE_NAME = “Badapore”; // Your table name
-
-const CLOUDINARY_CLOUD_NAME = “dqhpfc5aj”;
-
-const CLOUDINARY_UPLOAD_PRESET = “public_upload”;
+const AIRTABLE_PAT = "pattr4ED2Xfua6mMQ"; // Personal Access Token
+const AIRTABLE_BASE_ID = "appknuCqH6kGRFlxV";
+const AIRTABLE_TABLE_NAME = "Badapore";
+const CLOUDINARY_CLOUD_NAME = "dqhpfc5aj";
+const CLOUDINARY_UPLOAD_PRESET = "public_upload";
 
 /* --- MAP SETUP --- */
-
 let map = L.map('map').setView([10.6769, 122.5637], 13);
-
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-
     attribution: '&copy; OpenStreetMap contributors'
-
 }).addTo(map);
 
 let tempMarker;
-
 map.on('click', function(e) {
-
     if(tempMarker) map.removeLayer(tempMarker);
-
     tempMarker = L.marker(e.latlng).addTo(map);
-
     tempMarker.bindPopup("Selected location").openPopup();
-
 });
 
 /* --- LOAD EXISTING REPORTS --- */
-
 async function loadReports() {
-
     try {
-
         let res = await axios.get(`https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${AIRTABLE_TABLE_NAME}`, {
-
             headers: { Authorization: `Bearer ${AIRTABLE_PAT}` }
-
         });
-
         res.data.records.forEach(r => {
-
             let f = r.fields;
-
             if(f.Latitude && f.Longitude && f.Photo && f.Photo[0]?.url){
-
                 let marker = L.marker([f.Latitude, f.Longitude]).addTo(map);
-
                 marker.bindPopup(
-
                     `<b>Barangay:</b> ${f.Barangay}<br>
-
                      <b>Description:</b> ${f.Description}<br>
-
                      <img src="${f.Photo[0].url}" class="uploaded">`
-
                 );
-
             }
-
         });
-
     } catch(e) { console.error("Error loading Airtable records", e); }
-
 }
-
 loadReports();
 
 /* --- FORM SUBMISSION --- */
-
 document.getElementById('reportForm').addEventListener('submit', async function(e){
-
     e.preventDefault();
-
     if(!tempMarker) { alert("Select a location on map"); return; }
 
     let description = document.getElementById('description').value;
-
     let barangay = document.getElementById('barangay').value;
-
     let photoFile = document.getElementById('photo').files[0];
 
     if(photoFile){
-
         // Upload photo to Cloudinary
-
         let formData = new FormData();
-
         formData.append("file", photoFile);
-
-        formData.append("upload_preset", public_upload);
+        formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
 
         try {
-
-            let cloudRes = await axios.post(`https://api.cloudinary.com/v1_1/${dqhpfc5aj}/upload`, formData);
-
+            let cloudRes = await axios.post(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/upload`, formData);
             let photoUrl = cloudRes.data.secure_url;
 
             // Save record in Airtable using Personal Access Token
-
             await axios.post(`https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${AIRTABLE_TABLE_NAME}`, {
-
                 fields: {
-
                     Description: description,
-
                     Barangay: barangay,
-
                     Latitude: tempMarker.getLatLng().lat,
-
                     Longitude: tempMarker.getLatLng().lng,
-
                     Photo: [{ url: photoUrl }]
-
                 }
-
             }, { headers: { Authorization: `Bearer ${AIRTABLE_PAT}`, 'Content-Type': 'application/json' }});
 
             alert("Report submitted successfully!");
-
             location.reload();
-
         } catch(err) {
-
             console.error(err);
-
             alert("Error uploading photo or saving report");
-
         }
-
     }
-
 });
-
 </script>
-
 </body>
-
 </html>
-
