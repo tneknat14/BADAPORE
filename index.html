@@ -68,7 +68,7 @@ button:active{transform:translateY(1px)}
 
       <button type="submit" id="submitBtn">Submit Report</button>
       <div id="loading">
-        <img src="https://i.imgur.com/LLF5iyg.gif" alt="Loading...">
+        <img src="https://upload.wikimedia.org/wikipedia/commons/c/c7/Loading_2.gif" alt="Loading...">
         <div style="font-size:0.9rem;color:#6b7280;">Submitting report...</div>
       </div>
     </form>
@@ -134,7 +134,7 @@ map.on('click', async function(e){
 
   document.getElementById('selectedAddress').textContent = "Looking up address...";
   const addr = await reverseGeocode(lat, lon);
-  selectedAddress = addr || "Address not found";
+  selectedAddress = addr || `Lat:${lat.toFixed(6)}, Lon:${lon.toFixed(6)}`;
   document.getElementById('selectedAddress').textContent = selectedAddress;
   document.getElementById('address').value = selectedAddress;
   currentMarker.bindPopup(`<div style="max-width:220px;"><strong>${selectedAddress}</strong></div>`).openPopup();
@@ -196,12 +196,17 @@ document.getElementById('reportForm').addEventListener('submit', async function(
   const lat = parseFloat(document.getElementById('latitude').value);
   const lon = parseFloat(document.getElementById('longitude').value);
   const photo = document.getElementById('photo').files[0];
-  const addr = document.getElementById('address').value;
+  let addr = document.getElementById('address').value;
 
-  if(!desc || !barangay || !photo || !lat || !lon || !addr){
+  if(!desc || !barangay || !photo || !lat || !lon){
     showError('Please complete all fields.');
     loadingEl.style.display='none';
     return;
+  }
+
+  if(!addr) {
+    addr = `Lat:${lat.toFixed(6)}, Lon:${lon.toFixed(6)}`;
+    document.getElementById('address').value = addr;
   }
 
   try{
