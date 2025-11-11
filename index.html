@@ -83,9 +83,9 @@ const map = L.map('map', {
   center: [10.6769, 122.9511],
   zoom: 12,
   minZoom: 12,
-  maxZoom: 18,
-  maxBounds: bacolodBounds,
-  maxBoundsViscosity: 1.0
+  maxZoom: 18
+  // maxBounds: bacolodBounds, // removed
+  // maxBoundsViscosity: 1.0
 });
 
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
