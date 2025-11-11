@@ -65,6 +65,7 @@ button:active{transform:translateY(1px)}
       <input type="hidden" id="latitude">
       <input type="hidden" id="longitude">
       <input type="hidden" id="address">
+      <input type="hidden" id="reportedAt">
 
       <button type="submit" id="submitBtn">Submit Report</button>
       <div id="loading">
@@ -155,6 +156,17 @@ async function loadReports(){
         if(f.Description) popupHtml += `<strong>Description:</strong> ${f.Description}<br>`;
         if(f.Barangay) popupHtml += `<strong>Barangay:</strong> ${f.Barangay}<br>`;
         if(f.Address) popupHtml += `<strong>Address:</strong> ${f.Address}<br>`;
+        if(f.ReportedAt){
+          // format ISO date to MM/DD/YYYY 12-hour
+          const dt = new Date(f.ReportedAt);
+          let hours = dt.getHours();
+          const ampm = hours >= 12 ? 'PM' : 'AM';
+          hours = hours % 12;
+          hours = hours ? hours : 12;
+          const pad = n => n.toString().padStart(2,'0');
+          const formatted = `${pad(dt.getMonth()+1)}/${pad(dt.getDate())}/${dt.getFullYear()} ${pad(hours)}:${pad(dt.getMinutes())}:${pad(dt.getSeconds())} ${ampm}`;
+          popupHtml += `<strong>Reported At:</strong> ${formatted}<br>`;
+        }
         if(f.Photo && f.Photo.length > 0) popupHtml += `<img src="${f.Photo[0].url}" style="width:100%;border-radius:6px;margin-top:5px;">`;
         popupHtml += `</div>`;
         m.bindPopup(popupHtml);
@@ -219,16 +231,41 @@ document.getElementById('reportForm').addEventListener('submit', async function(
     const cloud = await uploadToCloudinary(photo);
     const imageUrl = cloud.secure_url;
 
-    const record = { fields: { Description: desc, Barangay: barangay, Address: addr, Latitude: lat, Longitude: lon, Photo:[{url:imageUrl}] } };
+    // ISO format for Airtable Date/Time field
+    const reportedAtISO = new Date().toISOString();
+    document.getElementById('reportedAt').value = reportedAtISO;
+
+    const record = { 
+      fields: { 
+        Description: desc, 
+        Barangay: barangay, 
+        Address: addr, 
+        Latitude: lat, 
+        Longitude: lon, 
+        Photo:[{url:imageUrl}],
+        ReportedAt: reportedAtISO
+      } 
+    };
+
     const airtableRes = await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${AIRTABLE_TABLE_NAME}`, {
       method:'POST', headers:{'Authorization':`Bearer ${AIRTABLE_PAT}`,'Content-Type':'application/json'}, body:JSON.stringify(record)
     });
     if(!airtableRes.ok){ const errText = await airtableRes.text(); console.error("Airtable error:",airtableRes.status,errText); showError('Failed to save report.'); loadingEl.style.display='none'; return; }
 
+    // Display in popup in 12-hour format
+    const dt = new Date(reportedAtISO);
+    let hours = dt.getHours();
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12;
+    hours = hours ? hours : 12;
+    const pad = n => n.toString().padStart(2,'0');
+    const formatted = `${pad(dt.getMonth()+1)}/${pad(dt.getDate())}/${dt.getFullYear()} ${pad(hours)}:${pad(dt.getMinutes())}:${pad(dt.getSeconds())} ${ampm}`;
+
     let popupHtml = `<div style="max-width:250px">`;
     popupHtml += `<strong>Description:</strong> ${desc}<br>`;
     popupHtml += `<strong>Barangay:</strong> ${barangay}<br>`;
     popupHtml += `<strong>Address:</strong> ${addr}<br>`;
+    popupHtml += `<strong>Reported At:</strong> ${formatted}<br>`;
     popupHtml += `<img src="${imageUrl}" style="width:100%;border-radius:6px;margin-top:5px;">`;
     popupHtml += `</div>`;
     L.marker([lat,lon], {icon:redIcon}).addTo(map).bindPopup(popupHtml);
@@ -239,6 +276,7 @@ document.getElementById('reportForm').addEventListener('submit', async function(
     document.getElementById('latitude').value='';
     document.getElementById('longitude').value='';
     document.getElementById('address').value='';
+    document.getElementById('reportedAt').value='';
     if(currentMarker){ map.removeLayer(currentMarker); currentMarker=null; }
   }catch(err){ console.error("Submit error:",err); showError('An error occurred while submitting.'); }
   loadingEl.style.display = 'none'; // hide spinner
