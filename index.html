@@ -142,7 +142,15 @@ async function loadReports(){
       const f = r.fields;
       if(f.Latitude && f.Longitude){
         const m = L.marker([f.Latitude,f.Longitude], {icon:redIcon}).addTo(map);
-        const popupHtml = `<div style="max-width:240px"><strong>${f.Address || ''}</strong></div>`;
+
+        // Construct popup with description, barangay, address, and image
+        let popupHtml = `<div style="max-width:250px">`;
+        if(f.Description) popupHtml += `<strong>Description:</strong> ${f.Description}<br>`;
+        if(f.Barangay) popupHtml += `<strong>Barangay:</strong> ${f.Barangay}<br>`;
+        if(f.Address) popupHtml += `<strong>Address:</strong> ${f.Address}<br>`;
+        if(f.Photo && f.Photo.length > 0) popupHtml += `<img src="${f.Photo[0].url}" style="width:100%;border-radius:6px;margin-top:5px;">`;
+        popupHtml += `</div>`;
+
         m.bindPopup(popupHtml);
       }
     });
@@ -185,7 +193,17 @@ document.getElementById('reportForm').addEventListener('submit', async function(
       method:'POST', headers:{'Authorization':`Bearer ${AIRTABLE_PAT}`,'Content-Type':'application/json'}, body:JSON.stringify(record)
     });
     if(!airtableRes.ok){ const errText = await airtableRes.text(); console.error("Airtable error:",airtableRes.status,errText); showError('Failed to save report.'); return; }
-    L.marker([lat,lon], {icon:redIcon}).addTo(map).bindPopup(`<div style="max-width:220px;"><strong>${addr}</strong></div>`);
+    
+    // Add the new marker with full popup info
+    let popupHtml = `<div style="max-width:250px">`;
+    popupHtml += `<strong>Description:</strong> ${desc}<br>`;
+    popupHtml += `<strong>Barangay:</strong> ${barangay}<br>`;
+    popupHtml += `<strong>Address:</strong> ${addr}<br>`;
+    popupHtml += `<img src="${imageUrl}" style="width:100%;border-radius:6px;margin-top:5px;">`;
+    popupHtml += `</div>`;
+
+    L.marker([lat,lon], {icon:redIcon}).addTo(map).bindPopup(popupHtml);
+
     alert('Report submitted!');
     document.getElementById('reportForm').reset();
     document.getElementById('selectedAddress').textContent='(tap map to select)';
