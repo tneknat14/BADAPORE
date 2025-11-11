@@ -30,6 +30,8 @@ button:active{transform:translateY(1px)}
 #map{width:100%;height:56vh;border-radius:12px;overflow:hidden}
 .note{font-size:0.9rem;color:var(--muted)}
 .error{color:#b91c1c;font-weight:600}
+#loading{text-align:center;margin-top:10px;display:none}
+#loading img{width:40px;height:40px}
 @media(min-width:700px){
   .container{padding:20px}
   h1{font-size:1.4rem}
@@ -65,6 +67,10 @@ button:active{transform:translateY(1px)}
       <input type="hidden" id="address">
 
       <button type="submit" id="submitBtn">Submit Report</button>
+      <div id="loading">
+        <img src="https://i.imgur.com/LLF5iyg.gif" alt="Loading...">
+        <div style="font-size:0.9rem;color:#6b7280;">Submitting report...</div>
+      </div>
     </form>
   </section>
 
@@ -182,31 +188,37 @@ async function isDuplicate(lat, lon, description, barangay){
 
 document.getElementById('reportForm').addEventListener('submit', async function(ev){
   ev.preventDefault(); clearError();
+  const loadingEl = document.getElementById('loading');
+  loadingEl.style.display = 'block'; // show spinner
+
   const desc = document.getElementById('description').value.trim();
   const barangay = document.getElementById('barangay').value.trim();
   const lat = parseFloat(document.getElementById('latitude').value);
   const lon = parseFloat(document.getElementById('longitude').value);
   const photo = document.getElementById('photo').files[0];
   const addr = document.getElementById('address').value;
-  if(!desc){ showError('Please add a short description.'); return; }
-  if(!barangay){ showError('Please add barangay.'); return; }
-  if(!photo){ showError('Please upload a photo.'); return; }
-  if(!lat || !lon){ showError('Please tap the map to pick a location.'); return; }
-  if(!addr){ showError('Address lookup failed.'); return; }
 
-  if(await isDuplicate(lat, lon, desc, barangay)){
-    showError('This report already exists.');
+  if(!desc || !barangay || !photo || !lat || !lon || !addr){
+    showError('Please complete all fields.');
+    loadingEl.style.display='none';
     return;
   }
 
   try{
+    if(await isDuplicate(lat, lon, desc, barangay)){
+      showError('This report already exists.');
+      loadingEl.style.display='none';
+      return;
+    }
+
     const cloud = await uploadToCloudinary(photo);
     const imageUrl = cloud.secure_url;
+
     const record = { fields: { Description: desc, Barangay: barangay, Address: addr, Latitude: lat, Longitude: lon, Photo:[{url:imageUrl}] } };
     const airtableRes = await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${AIRTABLE_TABLE_NAME}`, {
       method:'POST', headers:{'Authorization':`Bearer ${AIRTABLE_PAT}`,'Content-Type':'application/json'}, body:JSON.stringify(record)
     });
-    if(!airtableRes.ok){ const errText = await airtableRes.text(); console.error("Airtable error:",airtableRes.status,errText); showError('Failed to save report.'); return; }
+    if(!airtableRes.ok){ const errText = await airtableRes.text(); console.error("Airtable error:",airtableRes.status,errText); showError('Failed to save report.'); loadingEl.style.display='none'; return; }
 
     let popupHtml = `<div style="max-width:250px">`;
     popupHtml += `<strong>Description:</strong> ${desc}<br>`;
@@ -224,6 +236,7 @@ document.getElementById('reportForm').addEventListener('submit', async function(
     document.getElementById('address').value='';
     if(currentMarker){ map.removeLayer(currentMarker); currentMarker=null; }
   }catch(err){ console.error("Submit error:",err); showError('An error occurred while submitting.'); }
+  loadingEl.style.display = 'none'; // hide spinner
 });
 </script>
 </body>
