@@ -4,35 +4,39 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1" />
 <title>Bacolod Damaged Electrical Post — Mobile</title>
+
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+<link rel="stylesheet" href="https://api.mapbox.com/mapbox.js/plugins/leaflet-fullscreen/v1.0.1/leaflet.fullscreen.css" />
+
 <style>
-  :root{
-    --primary:#007bff;
-    --bg:#f7fafc;
-    --card:#ffffff;
-    --muted:#6b7280;
-  }
-  html,body{height:100%;margin:0;background:var(--bg);font-family:system-ui,-apple-system,Segoe UI,Roboto,"Helvetica Neue",Arial;}
-  .container{max-width:900px;margin:0 auto;padding:12px;display:flex;flex-direction:column;gap:12px;}
-  header{display:flex;align-items:center;gap:10px}
-  h1{font-size:1.1rem;margin:0}
-  .card{background:var(--card);border-radius:12px;padding:12px;box-shadow:0 1px 3px rgba(2,6,23,0.08);}
-  form{display:flex;flex-direction:column;gap:10px}
-  label{font-size:0.9rem;color:var(--muted)}
-  textarea,input[type="file"],input[type="text"]{width:100%;padding:10px;border-radius:8px;border:1px solid #e5e7eb;font-size:1rem}
-  textarea{min-height:100px;resize:vertical}
-  button{background:var(--primary);color:white;border:none;padding:12px;border-radius:10px;font-size:1.05rem;cursor:pointer}
-  button:active{transform:translateY(1px)}
-  #map{width:100%;height:56vh;border-radius:12px;overflow:hidden}
-  .note{font-size:0.9rem;color:var(--muted)}
-  .error{color:#b91c1c;font-weight:600}
-  @media(min-width:700px){
-    .container{padding:20px}
-    h1{font-size:1.4rem}
-    #map{height:60vh}
-  }
-  .form-first {order:0}
-  .map-second {order:1}
+:root{
+  --primary:#007bff;
+  --bg:#f7fafc;
+  --card:#ffffff;
+  --muted:#6b7280;
+}
+html,body{height:100%;margin:0;background:var(--bg);font-family:system-ui,-apple-system,Segoe UI,Roboto,"Helvetica Neue",Arial;}
+.container{max-width:900px;margin:0 auto;padding:12px;display:flex;flex-direction:column;gap:12px;}
+header{display:flex;align-items:center;gap:10px}
+h1{font-size:1.1rem;margin:0}
+.card{background:var(--card);border-radius:12px;padding:12px;box-shadow:0 1px 3px rgba(2,6,23,0.08);}
+form{display:flex;flex-direction:column;gap:10px}
+label{font-size:0.9rem;color:var(--muted)}
+textarea,input[type="file"],input[type="text"]{width:100%;padding:10px;border-radius:8px;border:1px solid #e5e7eb;font-size:1rem}
+textarea{min-height:100px;resize:vertical}
+button{background:var(--primary);color:white;border:none;padding:12px;border-radius:10px;font-size:1.05rem;cursor:pointer}
+button:active{transform:translateY(1px)}
+#error{margin-top:0;font-size:0.95rem}
+#map{width:100%;height:56vh;border-radius:12px;overflow:hidden}
+.note{font-size:0.9rem;color:var(--muted)}
+.error{color:#b91c1c;font-weight:600}
+@media(min-width:700px){
+  .container{padding:20px}
+  h1{font-size:1.4rem}
+  #map{height:60vh}
+}
+.form-first {order:0}
+.map-second {order:1}
 </style>
 </head>
 <body>
@@ -54,7 +58,7 @@
       <label for="photo">Photo (take or choose)</label>
       <input id="photo" type="file" accept="image/*" capture="environment" required>
 
-      <div class="note">Tap on the map below to choose the location (must be inside Bacolod City)</div>
+      <div class="note">Tap on the map below to choose the location</div>
 
       <input type="hidden" id="latitude">
       <input type="hidden" id="longitude">
@@ -66,31 +70,32 @@
 
   <section class="card map-second" aria-label="Map">
     <div id="map" role="application" aria-label="Map showing Bacolod City"></div>
-    <div style="margin-top:8px;font-size:0.95rem;color:var(--muted)"><strong>Selected address:</strong> <span id="selectedAddress">(tap map to select)</span></div>
+    <div style="margin-top:8px;font-size:0.95rem;color:var(--muted)">
+      <strong>Selected address:</strong> <span id="selectedAddress">(tap map to select)</span>
+    </div>
   </section>
 </div>
 
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<script src="https://api.mapbox.com/mapbox.js/plugins/leaflet-fullscreen/v1.0.1/Leaflet.fullscreen.min.js"></script>
+
 <script>
 const AIRTABLE_PAT = "pattr4ED2Xfua6mMQ.151fae179023e5ab1ebfff03612c6f6b1507ff6b11f6113aaf3f3f047c929fb8"; // Replace with new valid PAT
 const AIRTABLE_BASE_ID = "appknuCqH6kGRFlxV";
 const AIRTABLE_TABLE_NAME = "Bacolod Electrical Damage Reports";
 const CLOUDINARY_CLOUD_NAME = "dqhpfc5aj";
 const CLOUDINARY_UPLOAD_PRESET = "public_upload";
-const bacolodBounds = L.latLngBounds([10.58, 122.87], [10.78, 123.05]);
 
 const map = L.map('map', {
   center: [10.6769, 122.9511],
   zoom: 12,
   minZoom: 12,
-  maxZoom: 18
-  // maxBounds: bacolodBounds, // removed
-  // maxBoundsViscosity: 1.0
+  maxZoom: 18,
+  fullscreenControl: true
 });
 
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
 
-// RED icon for markers
 const redIcon = L.icon({
   iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png',
   shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
@@ -113,8 +118,6 @@ async function reverseGeocode(lat, lon){
 }
 
 map.on('click', async function(e){
-  if(!bacolodBounds.contains(e.latlng)){ showError("Please select a location within Bacolod City."); return; }
-  clearError();
   const lat = e.latlng.lat;
   const lon = e.latlng.lng;
   document.getElementById('latitude').value = lat;
@@ -142,15 +145,12 @@ async function loadReports(){
       const f = r.fields;
       if(f.Latitude && f.Longitude){
         const m = L.marker([f.Latitude,f.Longitude], {icon:redIcon}).addTo(map);
-
-        // Construct popup with description, barangay, address, and image
         let popupHtml = `<div style="max-width:250px">`;
         if(f.Description) popupHtml += `<strong>Description:</strong> ${f.Description}<br>`;
         if(f.Barangay) popupHtml += `<strong>Barangay:</strong> ${f.Barangay}<br>`;
         if(f.Address) popupHtml += `<strong>Address:</strong> ${f.Address}<br>`;
         if(f.Photo && f.Photo.length > 0) popupHtml += `<img src="${f.Photo[0].url}" style="width:100%;border-radius:6px;margin-top:5px;">`;
         popupHtml += `</div>`;
-
         m.bindPopup(popupHtml);
       }
     });
@@ -171,6 +171,15 @@ async function uploadToCloudinary(file){
   return resp.json();
 }
 
+async function isDuplicate(lat, lon, description, barangay){
+  const formula = `AND(Latitude=${lat},Longitude=${lon},Description='${description.replace(/'/g,"\\'")}',Barangay='${barangay.replace(/'/g,"\\'")}')`;
+  const res = await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${AIRTABLE_TABLE_NAME}?filterByFormula=${encodeURIComponent(formula)}`, {
+    headers:{ Authorization: `Bearer ${AIRTABLE_PAT}` }
+  });
+  const data = await res.json();
+  return data.records.length > 0;
+}
+
 document.getElementById('reportForm').addEventListener('submit', async function(ev){
   ev.preventDefault(); clearError();
   const desc = document.getElementById('description').value.trim();
@@ -182,8 +191,13 @@ document.getElementById('reportForm').addEventListener('submit', async function(
   if(!desc){ showError('Please add a short description.'); return; }
   if(!barangay){ showError('Please add barangay.'); return; }
   if(!photo){ showError('Please upload a photo.'); return; }
-  if(!lat || !lon){ showError('Please tap the map to pick a location inside Bacolod City.'); return; }
+  if(!lat || !lon){ showError('Please tap the map to pick a location.'); return; }
   if(!addr){ showError('Address lookup failed.'); return; }
+
+  if(await isDuplicate(lat, lon, desc, barangay)){
+    showError('This report already exists.');
+    return;
+  }
 
   try{
     const cloud = await uploadToCloudinary(photo);
@@ -193,15 +207,13 @@ document.getElementById('reportForm').addEventListener('submit', async function(
       method:'POST', headers:{'Authorization':`Bearer ${AIRTABLE_PAT}`,'Content-Type':'application/json'}, body:JSON.stringify(record)
     });
     if(!airtableRes.ok){ const errText = await airtableRes.text(); console.error("Airtable error:",airtableRes.status,errText); showError('Failed to save report.'); return; }
-    
-    // Add the new marker with full popup info
+
     let popupHtml = `<div style="max-width:250px">`;
     popupHtml += `<strong>Description:</strong> ${desc}<br>`;
     popupHtml += `<strong>Barangay:</strong> ${barangay}<br>`;
     popupHtml += `<strong>Address:</strong> ${addr}<br>`;
     popupHtml += `<img src="${imageUrl}" style="width:100%;border-radius:6px;margin-top:5px;">`;
     popupHtml += `</div>`;
-
     L.marker([lat,lon], {icon:redIcon}).addTo(map).bindPopup(popupHtml);
 
     alert('Report submitted!');
