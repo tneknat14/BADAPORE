@@ -1,153 +1,199 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
 <meta charset="utf-8" />
-<title>Bacolod Damaged Electrical Posts</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1" />
+<title>Bacolod Damaged Electrical Post — Mobile</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
 <style>
-body { font-family: Arial; margin: 20px; }
-#map { height: 500px; margin-top: 20px; }
-form { margin-bottom: 20px; }
-input, textarea, button { width: 100%; margin-bottom: 10px; padding: 5px; }
-img.uploaded { max-width: 200px; display: block; margin-top: 5px; }
-#error { color: red; margin-bottom: 10px; }
+  :root{
+    --primary:#007bff;
+    --bg:#f7fafc;
+    --card:#ffffff;
+    --muted:#6b7280;
+  }
+  html,body{height:100%;margin:0;background:var(--bg);font-family:system-ui,-apple-system,Segoe UI,Roboto,"Helvetica Neue",Arial;}
+  .container{max-width:900px;margin:0 auto;padding:12px;display:flex;flex-direction:column;gap:12px;}
+  header{display:flex;align-items:center;gap:10px}
+  h1{font-size:1.1rem;margin:0}
+  .card{background:var(--card);border-radius:12px;padding:12px;box-shadow:0 1px 3px rgba(2,6,23,0.08);}
+  form{display:flex;flex-direction:column;gap:10px}
+  label{font-size:0.9rem;color:var(--muted)}
+  textarea,input[type="file"],input[type="text"]{width:100%;padding:10px;border-radius:8px;border:1px solid #e5e7eb;font-size:1rem}
+  textarea{min-height:100px;resize:vertical}
+  button{background:var(--primary);color:white;border:none;padding:12px;border-radius:10px;font-size:1.05rem;cursor:pointer}
+  button:active{transform:translateY(1px)}
+  #map{width:100%;height:56vh;border-radius:12px;overflow:hidden}
+  .note{font-size:0.9rem;color:var(--muted)}
+  .error{color:#b91c1c;font-weight:600}
+  @media(min-width:700px){
+    .container{padding:20px}
+    h1{font-size:1.4rem}
+    #map{height:60vh}
+  }
+  .form-first {order:0}
+  .map-second {order:1}
 </style>
 </head>
 <body>
+<div class="container">
+  <header>
+    <h1>Bacolod Damaged Electrical Post — Report</h1>
+  </header>
 
-<h2>Report Damaged Electrical Post - Bacolod</h2>
+  <section class="card form-first" aria-labelledby="form-title">
+    <h2 id="form-title" style="font-size:1rem;margin:0 0 6px 0">Report</h2>
+    <div id="error" class="error" role="alert" style="display:none"></div>
+    <form id="reportForm" autocomplete="off">
+      <label for="description">Description (what happened)</label>
+      <textarea id="description" placeholder="e.g. leaning pole with hanging wires near City Hall" required></textarea>
 
-<div id="error"></div>
+      <label for="barangay">Barangay</label>
+      <input id="barangay" type="text" placeholder="e.g. Singcang-Air" required>
 
-<form id="reportForm">
-    Description:<br>
-    <textarea id="description" required></textarea><br>
-    Barangay:<br>
-    <input type="text" id="barangay" required><br>
-    Photo:<br>
-    <input type="file" id="photo" accept="image/*" required><br>
-    <button type="submit">Submit Report</button>
-</form>
+      <label for="photo">Photo (take or choose)</label>
+      <input id="photo" type="file" accept="image/*" capture="environment" required>
 
-<div id="map"></div>
+      <div class="note">Tap on the map below to choose the location (must be inside Bacolod City)</div>
+
+      <input type="hidden" id="latitude">
+      <input type="hidden" id="longitude">
+      <input type="hidden" id="address">
+
+      <button type="submit" id="submitBtn">Submit Report</button>
+    </form>
+  </section>
+
+  <section class="card map-second" aria-label="Map">
+    <div id="map" role="application" aria-label="Map showing Bacolod City"></div>
+    <div style="margin-top:8px;font-size:0.95rem;color:var(--muted)"><strong>Selected address:</strong> <span id="selectedAddress">(tap map to select)</span></div>
+  </section>
+</div>
 
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
 <script>
-/* --- CONFIG --- */
 const AIRTABLE_PAT = "pattr4ED2Xfua6mMQ.151fae179023e5ab1ebfff03612c6f6b1507ff6b11f6113aaf3f3f047c929fb8"; // Replace with new valid PAT
 const AIRTABLE_BASE_ID = "appknuCqH6kGRFlxV";
 const AIRTABLE_TABLE_NAME = "Bacolod Electrical Damage Reports";
 const CLOUDINARY_CLOUD_NAME = "dqhpfc5aj";
 const CLOUDINARY_UPLOAD_PRESET = "public_upload";
+const bacolodBounds = L.latLngBounds([10.58, 122.87], [10.78, 123.05]);
 
-/* --- MAP SETUP --- */
-let map = L.map('map').setView([10.663805, 122.949584], 13);
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '&copy; OpenStreetMap contributors'
-}).addTo(map);
-
-let tempMarker;
-map.on('click', function(e) {
-    if(tempMarker) map.removeLayer(tempMarker);
-    tempMarker = L.marker(e.latlng).addTo(map);
-    tempMarker.bindPopup("Selected location").openPopup();
+const map = L.map('map', {
+  center: [10.6769, 122.9511],
+  zoom: 12,
+  minZoom: 12,
+  maxZoom: 18,
+  maxBounds: bacolodBounds,
+  maxBoundsViscosity: 1.0
 });
 
-function showError(message) {
-    document.getElementById('error').textContent = message;
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
+
+// RED icon for markers
+const redIcon = L.icon({
+  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png',
+  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowSize: [41, 41]
+});
+
+let currentMarker = null;
+let selectedAddress = "";
+
+async function reverseGeocode(lat, lon){
+  try{
+    const resp = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}`);
+    if(!resp.ok) throw new Error('Geocode failed');
+    const data = await resp.json();
+    return data.display_name || "";
+  } catch(err){ console.error("Reverse geocode error:", err); return ""; }
 }
 
-/* --- LOAD EXISTING REPORTS --- */
-async function loadReports() {
-    try {
-        let res = await axios.get(`https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${AIRTABLE_TABLE_NAME}`, {
-            headers: { Authorization: `Bearer ${AIRTABLE_PAT}` }
-        });
-        res.data.records.forEach(r => {
-            let f = r.fields;
-            if(f.Latitude && f.Longitude && f.Photo && f.Photo[0]?.url){
-                let marker = L.marker([f.Latitude, f.Longitude]).addTo(map);
-                marker.bindPopup(
-                    `<b>Barangay:</b> ${f.Barangay}<br>
-                     <b>Description:</b> ${f.Description}<br>
-                     <img src="${f.Photo[0].url}" class="uploaded">`
-                );
-            }
-        });
-    } catch(e) {
-        console.error("Error loading Airtable records:", e);
-        if(e.response && e.response.status === 401) showError("Unauthorized: Invalid Personal Access Token (PAT).");
-        else if(e.response && e.response.status === 403) showError("Forbidden: PAT does not have access to this base.");
-        else if(e.response && e.response.status === 404) showError("Not found: Check Base ID or Table Name.");
-        else showError("Failed to load reports. See console for details.");
-    }
+map.on('click', async function(e){
+  if(!bacolodBounds.contains(e.latlng)){ showError("Please select a location within Bacolod City."); return; }
+  clearError();
+  const lat = e.latlng.lat;
+  const lon = e.latlng.lng;
+  document.getElementById('latitude').value = lat;
+  document.getElementById('longitude').value = lon;
+
+  if(currentMarker) map.removeLayer(currentMarker);
+  currentMarker = L.marker([lat,lon], {icon:redIcon}).addTo(map);
+
+  document.getElementById('selectedAddress').textContent = "Looking up address...";
+  const addr = await reverseGeocode(lat, lon);
+  selectedAddress = addr || "Address not found";
+  document.getElementById('selectedAddress').textContent = selectedAddress;
+  document.getElementById('address').value = selectedAddress;
+  currentMarker.bindPopup(`<div style="max-width:220px;"><strong>${selectedAddress}</strong></div>`).openPopup();
+});
+
+async function loadReports(){
+  try{
+    const res = await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${AIRTABLE_TABLE_NAME}`, {
+      headers: { Authorization: `Bearer ${AIRTABLE_PAT}` }
+    });
+    if(!res.ok){ console.error("Load reports failed", res.status); return; }
+    const data = await res.json();
+    data.records.forEach(r=>{
+      const f = r.fields;
+      if(f.Latitude && f.Longitude){
+        const m = L.marker([f.Latitude,f.Longitude], {icon:redIcon}).addTo(map);
+        const popupHtml = `<div style="max-width:240px"><strong>${f.Address || ''}</strong></div>`;
+        m.bindPopup(popupHtml);
+      }
+    });
+  }catch(err){ console.error("Error loading reports", err); }
 }
 loadReports();
 
-/* --- FORM SUBMISSION --- */
-document.getElementById('reportForm').addEventListener('submit', async function(e){
-    e.preventDefault();
-    showError("");
+function showError(msg){ const el=document.getElementById('error'); el.textContent=msg; el.style.display=msg?'block':'none'; }
+function clearError(){ showError(''); }
 
-    if(!tempMarker) { showError("Please select a location on the map."); return; }
+async function uploadToCloudinary(file){
+  const url = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/upload`;
+  const fd = new FormData();
+  fd.append('file', file);
+  fd.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+  const resp = await fetch(url,{method:'POST',body:fd});
+  if(!resp.ok) throw new Error("Cloudinary upload failed");
+  return resp.json();
+}
 
-    let description = document.getElementById('description').value.trim();
-    let barangay = document.getElementById('barangay').value.trim();
-    let photoFile = document.getElementById('photo').files[0];
+document.getElementById('reportForm').addEventListener('submit', async function(ev){
+  ev.preventDefault(); clearError();
+  const desc = document.getElementById('description').value.trim();
+  const barangay = document.getElementById('barangay').value.trim();
+  const lat = parseFloat(document.getElementById('latitude').value);
+  const lon = parseFloat(document.getElementById('longitude').value);
+  const photo = document.getElementById('photo').files[0];
+  const addr = document.getElementById('address').value;
+  if(!desc){ showError('Please add a short description.'); return; }
+  if(!barangay){ showError('Please add barangay.'); return; }
+  if(!photo){ showError('Please upload a photo.'); return; }
+  if(!lat || !lon){ showError('Please tap the map to pick a location inside Bacolod City.'); return; }
+  if(!addr){ showError('Address lookup failed.'); return; }
 
-    if(!description || !barangay || !photoFile) {
-        showError("All fields are required!");
-        return;
-    }
-
-    try {
-        // --- Upload to Cloudinary ---
-        let formData = new FormData();
-        formData.append("file", photoFile);
-        formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
-
-        let cloudRes = await axios.post(
-            `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/upload`,
-            formData,
-            { headers: { "X-Requested-With": "XMLHttpRequest" } }
-        );
-
-        if(!cloudRes.data.secure_url) throw new Error("Cloudinary upload failed");
-        let photoUrl = cloudRes.data.secure_url;
-        console.log("Cloudinary URL:", photoUrl);
-
-        // --- Submit to Airtable ---
-        let airtableRes = await axios.post(
-            `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${AIRTABLE_TABLE_NAME}`,
-            {
-                fields: {
-                    Description: description,
-                    Barangay: barangay,
-                    Latitude: tempMarker.getLatLng().lat,
-                    Longitude: tempMarker.getLatLng().lng,
-                    Photo: [{ url: photoUrl }]
-                }
-            },
-            {
-                headers: {
-                    Authorization: `Bearer ${AIRTABLE_PAT}`,
-                    'Content-Type': 'application/json'
-                }
-            }
-        );
-
-        console.log("Airtable response:", airtableRes.data);
-        alert("Report submitted successfully!");
-        location.reload();
-
-    } catch(err) {
-        console.error("Submission error:", err.response || err);
-        if(err.response && err.response.status === 401) showError("Unauthorized: Invalid PAT.");
-        else if(err.response && err.response.status === 403) showError("Forbidden: PAT does not have access to this base.");
-        else if(err.response && err.response.status === 404) showError("Not found: Check Base ID or Table Name.");
-        else showError("Failed to submit report. See console for details.");
-    }
+  try{
+    const cloud = await uploadToCloudinary(photo);
+    const imageUrl = cloud.secure_url;
+    const record = { fields: { Description: desc, Barangay: barangay, Address: addr, Latitude: lat, Longitude: lon, Photo:[{url:imageUrl}] } };
+    const airtableRes = await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${AIRTABLE_TABLE_NAME}`, {
+      method:'POST', headers:{'Authorization':`Bearer ${AIRTABLE_PAT}`,'Content-Type':'application/json'}, body:JSON.stringify(record)
+    });
+    if(!airtableRes.ok){ const errText = await airtableRes.text(); console.error("Airtable error:",airtableRes.status,errText); showError('Failed to save report.'); return; }
+    L.marker([lat,lon], {icon:redIcon}).addTo(map).bindPopup(`<div style="max-width:220px;"><strong>${addr}</strong></div>`);
+    alert('Report submitted!');
+    document.getElementById('reportForm').reset();
+    document.getElementById('selectedAddress').textContent='(tap map to select)';
+    document.getElementById('latitude').value='';
+    document.getElementById('longitude').value='';
+    document.getElementById('address').value='';
+    if(currentMarker){ map.removeLayer(currentMarker); currentMarker=null; }
+  }catch(err){ console.error("Submit error:",err); showError('An error occurred while submitting.'); }
 });
 </script>
 </body>
